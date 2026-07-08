@@ -1,0 +1,169 @@
+"use client";
+
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSession } from "next-auth/react";
+import { Search, Trash2, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+
+interface User {
+  _id: string;
+  name: string;
+  email: string;
+  phoneNum: string;
+  role: "admin" | "super-admin" | "candidate" | "recruiter" | "company";
+  address: string;
+  dateOfbirth: string;
+  evpAvailable: boolean;
+  avatar: {
+    url: string;
+  };
+  verificationInfo: {
+    verified: boolean;
+  };
+  deactivate: boolean;
+  createdAt: string;
+}
+
+interface UsersResponse {
+  success: boolean;
+  message: string;
+  data: User[];
+}
+
+export default function UsersPage() {
+  const session = useSession();
+  const token = session.data?.user?.accessToken;
+  const currentRole = session.data?.user?.role; // current logged-in user role
+  const queryClient = useQueryClient();
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
+  const itemsPerPage = 10;
+
+  // Fetch all users
+  const { data: usersData, isLoading } = useQuery<UsersResponse>({
+    queryKey: ["users"],
+    queryFn: async () => {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BASE_URL}/all/all-user`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      if (!response.ok) {
+        throw new Error("Failed to fetch users");
+      }
+      return response.json();
+    },
+    enabled: !!token,
+  });
+
+  // Delete user mutation
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BASE_URL}/delete/user/${userId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      if (!response.ok) {
+        throw new Error("Failed to delete user");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      setDeleteUserId(null);
+    },
+  });
+
+  // Filter and search users
+  const filteredUsers = usersData?.data?.filter((user) => {
+    const matchesSearch =
+      user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.phoneNum.includes(searchQuery);
+
+    const matchesRole = roleFilter === "all" || user.role === roleFilter;
+
+    // Restrict visibility for admin users
+    let canView = true;
+    if (currentRole === "admin") {
+      if (user.role === "super-admin" || user.role === "admin") {
+        canView = false;
+      }
+    }
+
+    return matchesSearch && matchesRole && canView;
+  });
+
+  // Pagination
+  const totalPages = Math.ceil((filteredUsers?.length || 0) / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedUsers = filteredUsers?.slice(startIndex, endIndex);
+
+  const handleDeleteUser = (userId: string) => {
+    deleteUserMutation.mutate(userId);
+  };
+
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  const getRoleBadgeColor = (role: string) => {
+    switch (role) {
+      case "super-admin":
+        return "bg-purple-100 text-purple-800";
+      case "admin":
+        return "bg-blue-100 text-blue-800";
+      case "recruiter":
+        return "bg-green-100 text-green-800";
+      case "candidate":
+        return "bg-orange-100 text-orange-800";
+      case "company":
+        return "bg-cyan-100 text-cyan-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="p-6">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
