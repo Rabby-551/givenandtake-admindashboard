@@ -21,7 +21,9 @@ const csp = [
   `img-src 'self' data: blob: https://res.cloudinary.com`,
   `font-src 'self' data: https:`,
   `style-src 'self' 'unsafe-inline' https:`,
-  `script-src 'self' 'unsafe-inline' https:`,
+  `script-src 'self' 'unsafe-inline' https:${
+    process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""
+  }`,
   `connect-src 'self' https:${apiOrigin ? ` ${apiOrigin}` : ""}`,
   `media-src 'self' https: data: blob:`,
   `upgrade-insecure-requests`,
