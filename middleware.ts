@@ -68,7 +68,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Role-based restrictions
-  const role = token?.user.role // assuming your JWT includes "role"
+  const role = token?.user?.role // assuming your JWT includes "role"
 
   // Routes restricted for admin
   const restrictedForAdmin = ['/payment-details', '/plan', '/subscriber']
