@@ -138,6 +138,14 @@ const NEW_PAGE_KEY = "__new__";
 const keyOf = (page: ContentData) =>
   isBuiltInType(page.type) ? `builtin:${page.type}` : `id:${page._id ?? ""}`;
 
+/** Whether two versions of a page carry the same editable content. */
+const isSameContent = (a: ContentData, b: ContentData) =>
+  a.title === b.title &&
+  a.description === b.description &&
+  a.type === b.type &&
+  (a.published ?? true) === (b.published ?? true) &&
+  (a._id ?? "") === (b._id ?? "");
+
 const ContentsPage: React.FC = () => {
   const { data: session, status } = useSession();
   const token = session?.user?.accessToken;
@@ -201,6 +209,18 @@ const ContentsPage: React.FC = () => {
     [pages]
   );
 
+  const allPages = useMemo(
+    () => [...systemPages, ...customPages],
+    [systemPages, customPages]
+  );
+
+  /** True while the editor holds edits that have not been saved yet. */
+  const isDirty =
+    draft.title !== baseline.title ||
+    draft.description !== baseline.description ||
+    draft.type !== baseline.type ||
+    (draft.published ?? true) !== (baseline.published ?? true);
+
   /** Opens a page in the editor. The only place `selectedKey` and `draft` move together. */
   const openPage = useCallback((page: ContentData) => {
     const snapshot = { ...page };
@@ -210,7 +230,7 @@ const ContentsPage: React.FC = () => {
     setCopied(false);
   }, []);
 
-  // Select the first built-in page once data arrives, so the editor is never blank.
+  // Select the first built-in page immediately, so the editor is never blank.
   const hasAutoSelected = useRef(false);
   useEffect(() => {
     if (hasAutoSelected.current) return;
@@ -220,15 +240,25 @@ const ContentsPage: React.FC = () => {
     openPage(systemPages[0]);
   }, [systemPages, selectedKey, openPage]);
 
+  /**
+   * The six built-in pages are listed from a local definition so the sidebar
+   * renders instantly — which means the editor first opens on a placeholder
+   * whose body is still empty. Fill the fields in as soon as the stored content
+   * arrives, instead of leaving them blank until someone reloads.
+   *
+   * Unsaved edits always win: a refresh landing mid-typing must never discard
+   * what the admin has written.
+   */
+  useEffect(() => {
+    if (isNew || !selectedKey || isDirty) return;
+    const stored = allPages.find((p) => keyOf(p) === selectedKey);
+    if (!stored || isSameContent(stored, baseline)) return;
+    openPage(stored);
+  }, [allPages, selectedKey, isNew, isDirty, baseline, openPage]);
+
   const builtInInfo = isNew ? undefined : builtInByType.get(draft.type);
   const isBuiltIn = Boolean(builtInInfo);
   const isCard = Boolean(builtInInfo && builtInInfo.publicPath === null);
-
-  const isDirty =
-    draft.title !== baseline.title ||
-    draft.description !== baseline.description ||
-    draft.type !== baseline.type ||
-    (draft.published ?? true) !== (baseline.published ?? true);
 
   // The slug that will actually be used (live preview for new pages).
   const effectiveSlug = isNew
@@ -248,7 +278,12 @@ const ContentsPage: React.FC = () => {
     );
 
   const selectPage = (page: ContentData) => {
-    if (keyOf(page) === selectedKey && !isNew) return;
+    if (keyOf(page) === selectedKey && !isNew) {
+      // Already open. Re-load it from stored data so clicking a page always
+      // shows what is actually saved — but never at the cost of live edits.
+      if (!isDirty) openPage(page);
+      return;
+    }
     if (!confirmDiscard()) return;
     openPage(page);
   };
