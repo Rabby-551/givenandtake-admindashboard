@@ -22,11 +22,16 @@ export const authOptions: AuthOptions = {
 
           const data = await res.json();
 
-          if (data?.success && data?.data?.role === "admin" || data?.data?.role === "super-admin") {
+          // Parenthesised deliberately: without it `&&` binds tighter than
+          // `||` and a failed login response would still be accepted as long
+          // as it happened to carry a super-admin role.
+          const role = data?.data?.role;
+          const isStaff = role === "admin" || role === "super-admin";
+
+          if (data?.success && isStaff && data?.data?.accessToken) {
             return data.data;
-          } else {
-            return null;
           }
+          return null;
         } catch (error) {
           console.error("Fetch login error:", error);
           return null;

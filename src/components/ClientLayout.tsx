@@ -256,10 +256,12 @@ export default function ClientLayout({
     return name.charAt(0).toUpperCase();
   };
 
-  // Filter menu items based on user role
+  // Filter menu items based on user role. Must stay in step with
+  // `restrictedForAdmin` in middleware.ts — content management is open to both
+  // admins and super-admins, only the billing sections are super-admin only.
   const filteredMenuItems = admin
     ? menuItems.filter(
-        (item) => !["Payment Details", "Plan", "Contents"].includes(item.title)
+        (item) => !["Payment Details", "Plan"].includes(item.title)
       )
     : menuItems;
 

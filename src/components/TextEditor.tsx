@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 const ReactQuill = dynamic(() => import("react-quill-new"), { ssr: false });
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 
 interface QuillEditorProps {
   value: string;
@@ -33,6 +33,15 @@ const modules = {
 };
 
 const QuillEditor = ({ value, onChange, id }: QuillEditorProps) => {
+  /**
+   * Keep the latest onChange in a ref. Quill hands change events to whatever
+   * props object it happens to hold at the time, which during a value swap is
+   * still the *previous* render's props. Reading the handler through a ref
+   * guarantees we never call a stale closure.
+   */
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
   const formats = useMemo(
     () => [
       "header",
@@ -56,9 +65,15 @@ const QuillEditor = ({ value, onChange, id }: QuillEditorProps) => {
       <ReactQuill
         id={id}
         value={value}
-        onChange={(content) => {
+        onChange={(content, _delta, source) => {
+          // Quill also emits a change when we *load* content into it
+          // (source "api"/"silent"), e.g. when the parent switches to a
+          // different document. Reporting those back up would overwrite the
+          // newly selected document with the text we just loaded, so only
+          // real edits by the person typing are propagated.
+          if (source !== "user") return;
           const cleaned = content === "<p><br></p>" ? "" : content;
-          onChange(cleaned);
+          onChangeRef.current(cleaned);
         }}
         modules={modules}
         formats={formats}
